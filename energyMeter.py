@@ -22,6 +22,8 @@ LOW_TARIFF_END = datetime.time(7, 00)
 
 load_dotenv()
 ENERGY_PER_PULSE = int(os.getenv("ENERGY_PER_PULSE"))
+PULSE_METER_PIN = int(os.getenv("PULSE_METER_PIN"))
+INTERRUPT_BUTTON_PIN = int(os.getenv("INTERRUPT_BUTTON_PIN"))
 INFLUX_ADDRESS = os.getenv("INFLUX_ADDRESS")
 INFLUX_SERIES = os.getenv("INFLUX_SERIES")
 INFLUX_METER_HIGH = os.getenv("INFLUX_METER_HIGH")
@@ -33,8 +35,11 @@ message_body = ''
 
 
 def shutdown(signal, frame):
-    print("KeyboardInterrupt, halting")
+    print("halting due to {} event".format(signal))
     GPIO.cleanup()
+    file = open("message_body.txt", 'a')
+    file.write(message_body)
+    file.close()
     sys.exit(0)
 
 
@@ -111,11 +116,15 @@ def is_low_tariff(datetime_to_check: datetime.datetime) -> bool:
     return False
 
 
-signal.signal(signal.SIGINT, shutdown)
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.add_event_detect(4, GPIO.FALLING, callback=handle_interrupt, bouncetime=50)
+
+GPIO.setup(PULSE_METER_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.add_event_detect(PULSE_METER_PIN , GPIO.FALLING, callback=handle_interrupt, bouncetime=50)
+
+signal.signal(signal.SIGINT, shutdown)
+GPIO.setup(INTERRUPT_BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.add_event_detect(PULSE_METER_PIN , GPIO.FALLING, callback=shutdown('button', ''), bouncetime=100)
 
 while True:
     loop()
