@@ -29,14 +29,21 @@ INFLUX_SERIES = os.getenv("INFLUX_SERIES")
 INFLUX_METER_HIGH = os.getenv("INFLUX_METER_HIGH")
 INFLUX_METER_LOW = os.getenv("INFLUX_METER_LOW")
 
+try:
+    DEBUG = sys.argv[1] == 'debug'
+except IndexError:
+    DEBUG = False
+
+
 last_pulse_time = 0
 timestamps = []
 message_body = ''
 
 
-def shutdown(signal, frame):
-    print("halting due to {} event".format(signal))
+def shutdown(signal, frame = None):
+    log("halting due to {} event".format(signal), True)
     GPIO.cleanup()
+    global message_body
     file = open("message_body.txt", 'a')
     file.write(message_body)
     file.close()
@@ -46,6 +53,7 @@ def shutdown(signal, frame):
 def handle_interrupt(pin):
     global timestamps
     timestamps.append(time.time_ns())
+    log("interrupt handled")
 
 
 def send_message():
@@ -55,6 +63,7 @@ def send_message():
 
     try:
         r = requests.post(INFLUX_ADDRESS, data=message_body)
+        log("request sent! Status code: {:d}".format(r.status_code))
     except requests.exceptions.RequestException:
         return
 
@@ -116,6 +125,15 @@ def is_low_tariff(datetime_to_check: datetime.datetime) -> bool:
     return False
 
 
+def log(logstring, force = False):
+    global DEBUG;
+
+    if DEBUG == False and force == False:
+        return
+
+    print("[{:s}] {:s}".format(datetime.datetime.now().isoformat(), logstring))
+
+
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
@@ -123,8 +141,9 @@ GPIO.setup(PULSE_METER_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 GPIO.add_event_detect(PULSE_METER_PIN , GPIO.FALLING, callback=handle_interrupt, bouncetime=50)
 
 signal.signal(signal.SIGINT, shutdown)
+signal.signal(signal.SIGTERM, shutdown)
 GPIO.setup(INTERRUPT_BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.add_event_detect(PULSE_METER_PIN , GPIO.FALLING, callback=shutdown('button', ''), bouncetime=100)
+GPIO.add_event_detect(INTERRUPT_BUTTON_PIN, GPIO.FALLING, callback=shutdown, bouncetime=100)
 
 while True:
     loop()
