@@ -9,6 +9,7 @@ import RPi.GPIO as GPIO
 import signal
 import sys
 import time
+import logging
 
 # is_low_tariff will return true on Easter monday, Ascension day, Pentecost monday, and the dates specified here.
 LOW_TARIFF_DAYS = [
@@ -29,19 +30,22 @@ INFLUX_SERIES = os.getenv("INFLUX_SERIES")
 INFLUX_METER_HIGH = os.getenv("INFLUX_METER_HIGH")
 INFLUX_METER_LOW = os.getenv("INFLUX_METER_LOW")
 
+log_level = logging.INFO
 try:
-    DEBUG = sys.argv[1] == 'debug'
+    if sys.argv[1] == 'debug':
+        log_level = logging.DEBUG
 except IndexError:
-    DEBUG = False
+    pass
 
+logging.basicConfig(filename="/var/log/energymeter.log", level=log_level)
 
 last_pulse_time = 0
 timestamps = []
 message_body = ''
 
 
-def shutdown(signal, frame = None):
-    log("halting due to {} event".format(signal), True)
+def shutdown(signal, frame=None):
+    logging.debug("halting due to {} event".format(signal), True)
     GPIO.cleanup()
     global message_body
     file = open("message_body.txt", 'a')
@@ -53,7 +57,7 @@ def shutdown(signal, frame = None):
 def handle_interrupt(pin):
     global timestamps
     timestamps.append(time.time_ns())
-    log("interrupt handled")
+    logging.debug("interrupt handled")
 
 
 def send_message():
@@ -61,14 +65,19 @@ def send_message():
     if message_body == "":
         return
 
+    logging.debug("Trying to send message body..")
     try:
         r = requests.post(INFLUX_ADDRESS, data=message_body)
-        log("request sent! Status code: {:d}".format(r.status_code))
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as e:
+        logging.error("Encountered exception during request: {:d}".format(e))
         return
 
-    if r.status_code == 204:
-        message_body = ""
+    if r.status_code != 204:
+        logging.error("Unexpected status code: {}".format(r.status_code))
+        return
+
+    logging.debug("Message body successfully sent")
+    message_body = ""
 
 
 def loop():
@@ -86,7 +95,9 @@ def loop():
 
     interval = pulse_time - last_pulse_time
     power = 10 ** 9 * ENERGY_PER_PULSE / interval  # interval is in nanoseconds, hence the factor 10^9
-    message_body += "{:s},meter={:s} value=1,power={:.2f} {:d}\n".format(INFLUX_SERIES, meter, power, pulse_time)
+    message = "{:s},meter={:s} value=1,power={:.2f} {:d}\n".format(INFLUX_SERIES, meter, power, pulse_time)
+    message_body += message
+    logging.debug("Added string to message body: {:d}".format(message))
     last_pulse_time = pulse_time
 
 
@@ -125,20 +136,11 @@ def is_low_tariff(datetime_to_check: datetime.datetime) -> bool:
     return False
 
 
-def log(logstring, force = False):
-    global DEBUG;
-
-    if DEBUG == False and force == False:
-        return
-
-    print("[{:s}] {:s}".format(datetime.datetime.now().isoformat(), logstring))
-
-
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
 GPIO.setup(PULSE_METER_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.add_event_detect(PULSE_METER_PIN , GPIO.FALLING, callback=handle_interrupt, bouncetime=50)
+GPIO.add_event_detect(PULSE_METER_PIN, GPIO.FALLING, callback=handle_interrupt, bouncetime=50)
 
 signal.signal(signal.SIGINT, shutdown)
 signal.signal(signal.SIGTERM, shutdown)
