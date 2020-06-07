@@ -45,7 +45,7 @@ message_body = ''
 
 
 def shutdown(signal, frame=None):
-    logging.debug("halting due to {} event".format(signal), True)
+    logging.debug("halting due to {} event".format(signal))
     GPIO.cleanup()
     global message_body
     file = open("message_body.txt", 'a')
