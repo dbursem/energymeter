@@ -37,7 +37,7 @@ try:
 except IndexError:
     pass
 
-logging.basicConfig(filename="/var/log/energymeter.log", level=log_level)
+logging.basicConfig(filename="/var/log/energymeter.log", level=log_level, format="%(asctime)s %(message)s")
 
 last_pulse_time = 0
 timestamps = []
