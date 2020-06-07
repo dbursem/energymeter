@@ -69,7 +69,7 @@ def send_message():
     try:
         r = requests.post(INFLUX_ADDRESS, data=message_body)
     except requests.exceptions.RequestException as e:
-        logging.error("Encountered exception during request: {:d}".format(e))
+        logging.error("Encountered exception during request: {}".format(e))
         return
 
     if r.status_code != 204:
@@ -97,7 +97,7 @@ def loop():
     power = 10 ** 9 * ENERGY_PER_PULSE / interval  # interval is in nanoseconds, hence the factor 10^9
     message = "{:s},meter={:s} value=1,power={:.2f} {:d}\n".format(INFLUX_SERIES, meter, power, pulse_time)
     message_body += message
-    logging.debug("Added string to message body: {:d}".format(message))
+    logging.debug("Added string to message body: {:s}".format(message))
     last_pulse_time = pulse_time
 
 
